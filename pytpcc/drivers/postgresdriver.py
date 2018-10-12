@@ -73,6 +73,7 @@ TXN_QUERIES = {
 class PostgresDriver(AbstractDriver):
     DEFAULT_CONFIG = {
         "database": ("The connection string to the PostgreSQL database", "host=localhost dbname=tpcc" ),
+        "schema": ("The schema in PostgreSQL database", "public" ),
     }
     
     def __init__(self, ddl):
@@ -95,14 +96,22 @@ class PostgresDriver(AbstractDriver):
             assert key in config, "Missing parameter '%s' in %s configuration" % (key, self.name)
         
         self.database = str(config["database"])
+        self.schema = config["schema"]
+
+        self.reset = bool(config["reset"])
                     
         self.conn = psycopg2.connect(self.database)
         self.cursor = self.conn.cursor()
+        self.cursor.execute("SET search_path TO %s"%self.schema)
 
-        if config["reset"]:
+    ## ----------------------------------------------
+    ## loadStart
+    ## ----------------------------------------------
+    def loadStart(self):
+        if self.reset:
             logging.debug("Deleting database '%s'" % self.database)
-            self.cursor.execute("DROP SCHEMA public CASCADE")
-            self.cursor.execute("CREATE SCHEMA public")
+            self.cursor.execute("DROP SCHEMA IF EXISTS %s CASCADE"%self.schema)
+            self.cursor.execute("CREATE SCHEMA %s"%self.schema)
             self.cursor.execute("DROP DOMAIN IF EXISTS TINYINT")
 
         self.cursor.execute("select * from information_schema.tables where table_name=%s", ('order_line',))
