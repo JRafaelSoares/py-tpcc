@@ -195,8 +195,7 @@ TABLE_INDEXES = {
 ## ==============================================
 class MongodbDriver(AbstractDriver):
     DEFAULT_CONFIG = {
-        "host":         ("The hostname to mongod", "localhost" ),
-        "port":         ("The port number to mongod", 27017 ),
+        "uri":          ("The connection URI to mongod", "mongodb://localhost:27017" ),
         "name":         ("Collection name", "tpcc"),
         "denormalize":  ("If set to true, then the CUSTOMER data will be denormalized into a single document", True),
     }
@@ -233,7 +232,7 @@ class MongodbDriver(AbstractDriver):
         for key in MongodbDriver.DEFAULT_CONFIG.keys():
             assert key in config, "Missing parameter '%s' in %s configuration" % (key, self.name)
         
-        self.conn = pymongo.MongoClient(config['host'], int(config['port']))
+        self.conn = pymongo.MongoClient(config['uri'])
         self.database = self.conn[str(config['name'])]
         self.denormalize = config['denormalize']
         if self.denormalize: logging.debug("Using denormalized data model")
