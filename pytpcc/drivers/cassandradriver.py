@@ -26,6 +26,7 @@
 
 
 import pycassa
+from pycassa.pool import *
 from pycassa.index import *
 from pycassa.system_manager import *
 
@@ -234,7 +235,7 @@ class CassandraDriver(AbstractDriver):
             self.sys.create_index(keyspace,'STOCK','S_QUANTITY', UTF8_TYPE)
 
                 
-        self.conn = pycassa.connect(str(config["keyspace"]),[connection])
+        self.conn = pycassa.ConnectionPool(str(config["keyspace"]),[connection],timeout=None)
         self.new_ordercf=pycassa.ColumnFamily(self.conn,'NEW_ORDER')
         self.orderscf=pycassa.ColumnFamily(self.conn, 'ORDERS')
         self.order_linecf=pycassa.ColumnFamily(self.conn, 'ORDER_LINE')
