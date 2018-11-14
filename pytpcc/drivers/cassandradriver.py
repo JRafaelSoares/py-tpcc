@@ -390,7 +390,7 @@ class CassandraDriver(AbstractDriver):
 #   print tableName+'--' + str(len(tuples))
                  
     def loadFinish(self):
-         logging.info("Commiting changes to database")
+         logging.debug("Commiting changes to database")
 
             
 
@@ -663,7 +663,7 @@ class CassandraDriver(AbstractDriver):
     ## doOrderStatus
     ##-----------------------------------
     def doOrderStatus(self, params):
-        logging.info("do orderStatus")
+        logging.debug("do orderStatus")
         w_id = params["w_id"]
         d_id = params["d_id"]
         c_id = params["c_id"]
@@ -732,7 +732,7 @@ class CassandraDriver(AbstractDriver):
 
 
     def doStockLevel(self, params):
-        logging.info("do stocklevel")
+        logging.debug("do stocklevel")
         w_id = params["w_id"]
         d_id = params["d_id"]
         threshold = params["threshold"]
