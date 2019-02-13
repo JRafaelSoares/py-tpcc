@@ -84,7 +84,7 @@ def startLoading(driverClass, scaleParameters, args, config):
     
     loader_results = [ ]
     for i in range(args['clients']):
-        r = pool.apply_async(loaderFunc, (driverClass, scaleParameters, args, config, w_ids[i], True))
+        r = pool.apply_async(loaderFunc, (driverClass, scaleParameters, args, config, w_ids[i], scaleParameters.starting_warehouse == 1))
         loader_results.append(r)
     ## FOR
     
@@ -183,6 +183,8 @@ if __name__ == '__main__':
                          help='Instruct the driver to reset the contents of the database')
     aparser.add_argument('--scalefactor', default=1, type=float, metavar='SF',
                          help='Benchmark scale factor')
+    aparser.add_argument('--skip-warehouses', default=0, type=int, metavar='SW',
+                         help='Number of Warehouses previously loaded')
     aparser.add_argument('--warehouses', default=4, type=int, metavar='W',
                          help='Number of Warehouses')
     aparser.add_argument('--duration', default=60, type=int, metavar='D',
@@ -237,6 +239,7 @@ if __name__ == '__main__':
     scaleParameters = scaleparameters.makeWithScaleFactor(args['warehouses'], args['scalefactor'])
     nurand = rand.setNURand(nurand.makeForLoad())
     if args['debug']: logging.debug("Scale Parameters:\n%s" % scaleParameters)
+    scaleParameters.starting_warehouse = int(args['skip_warehouses'])+1
     
     ## DATA LOADER!!!
     load_time = None
@@ -244,7 +247,7 @@ if __name__ == '__main__':
         logging.info("Loading TPC-C benchmark data using %s" % (driver))
         load_start = time.time()
         if args['clients'] == 1:
-            l = loader.Loader(driver, scaleParameters, range(scaleParameters.starting_warehouse, scaleParameters.ending_warehouse+1), True)
+            l = loader.Loader(driver, scaleParameters, range(scaleParameters.starting_warehouse, scaleParameters.ending_warehouse+1), scaleParameters.starting_warehouse == 1)
             driver.loadStart()
             l.execute()
             driver.loadFinish()
