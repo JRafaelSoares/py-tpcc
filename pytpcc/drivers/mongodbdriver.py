@@ -160,33 +160,17 @@ TABLE_INDEXES = {
         "W_ID",
     ],    
     constants.TABLENAME_DISTRICT: [
-        "D_ID",
-        "D_W_ID",
+        [ ("D_W_ID", pymongo.ASCENDING), ("D_ID", pymongo.ASCENDING) ]
     ],
     constants.TABLENAME_CUSTOMER:   [
-        "C_ID",
-        "C_D_ID",
-        "C_W_ID",
+        [ ("C_W_ID", pymongo.ASCENDING), ("C_D_ID", pymongo.ASCENDING), ("C_ID", pymongo.ASCENDING) ],
+        [ ("C_W_ID", pymongo.ASCENDING), ("C_D_ID", pymongo.ASCENDING), ("C_LAST", pymongo.ASCENDING) ],
+
+        # Denormalized ORDERS
+        [ ("C_W_ID", pymongo.ASCENDING), ("C_D_ID", pymongo.ASCENDING), ("ORDERS.O_ID", pymongo.ASCENDING) ],
     ],
     constants.TABLENAME_STOCK:      [
-        "S_I_ID",
-        "S_W_ID",
-    ],
-    constants.TABLENAME_ORDERS:     [
-        "O_ID",
-        "O_D_ID",
-        "O_W_ID",
-        "O_C_ID",
-    ],
-    constants.TABLENAME_NEW_ORDER:  [
-        "NO_O_ID",
-        "NO_D_ID",
-        "NO_W_ID",
-    ],
-    constants.TABLENAME_ORDER_LINE: [
-        "OL_O_ID",
-        "OL_D_ID",
-        "OL_W_ID",
+        [ ("S_W_ID",pymongo.ASCENDING), ("S_I_ID", pymongo.ASCENDING) ]
     ],
 }
 
