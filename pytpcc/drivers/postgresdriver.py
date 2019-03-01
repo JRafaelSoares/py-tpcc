@@ -100,6 +100,33 @@ TXN_QUERIES = {
     },
 }
 
+ALT_TXN_QUERIES = {
+    
+    "ORDER_STATUS": {
+        "getCustomerByCustomerId": "SELECT C_ID, C_FIRST, C_MIDDLE, C_LAST, C_BALANCE FROM CUSTOMER WHERE C_W_ID = %s AND C_D_ID = %s AND C_ID = %s", # w_id, d_id, c_id
+        "getCustomersByLastName": "SELECT C_ID, C_FIRST, C_MIDDLE, C_LAST, C_BALANCE FROM CUSTOMER WHERE C_W_ID = %s AND C_D_ID = %s AND C_LAST = %s ORDER BY C_FIRST", # w_id, d_id, c_last
+        "getLastOrder": "SELECT O_ID, O_CARRIER_ID, O_ENTRY_D FROM ORDERS WHERE O_W_ID = %s AND O_D_ID = %s AND O_C_ID = %s ORDER BY O_ID DESC LIMIT 1", # w_id, d_id, c_id
+        "getOrderLines": "SELECT OL_SUPPLY_W_ID, OL_I_ID, OL_QUANTITY, OL_AMOUNT, OL_DELIVERY_D FROM ORDER_LINE WHERE OL_W_ID = %s AND OL_D_ID = %s AND OL_O_ID = %s", # w_id, d_id, o_id        
+    },
+        
+    "STOCK_LEVEL": {
+        "getOId": "SELECT D_NEXT_O_ID FROM DISTRICT WHERE D_W_ID = %s AND D_ID = %s", 
+        "getStockCount": """
+            SELECT COUNT(*) FROM STOCK
+        	WHERE S_I_ID = ANY (ARRAY (
+			    -- nest+unest prevents PostgreSQL from doing a JOIN
+			    SELECT ARRAY_AGG(DISTINCT OL_I_ID) FROM ORDER_LINE
+                	WHERE OL_W_ID = %s
+                  		AND OL_D_ID = %s
+                  		AND OL_O_ID < %s
+                  		AND OL_O_ID >= %s
+			    ))
+                AND S_W_ID = %s
+		        AND S_QUANTITY < %s
+        """,
+    },
+}
+
 
 ## ==============================================
 ## PostgresDriver
@@ -108,6 +135,7 @@ class PostgresDriver(AbstractDriver):
     DEFAULT_CONFIG = {
         "database": ("The connection string to the PostgreSQL database", "host=localhost dbname=tpcc" ),
         "schema": ("The schema in PostgreSQL database", "public" ),
+        "opt": ("Use optimized queries for FDW", "false" ),
     }
     
     def __init__(self, ddl):
@@ -133,7 +161,11 @@ class PostgresDriver(AbstractDriver):
         self.schema = config["schema"]
 
         self.reset = bool(config["reset"])
-                    
+
+        if config["opt"].lower().startswith('t'):
+            global TXN_QUERIES, ALT_TXN_QUERIES
+            TXN_QUERIES.update(ALT_TXN_QUERIES)
+
         self.conn = psycopg2.connect(self.database)
         self.cursor = self.conn.cursor()
         self.cursor.execute("SET search_path TO %s"%self.schema)
