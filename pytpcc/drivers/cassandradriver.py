@@ -755,7 +755,7 @@ class CassandraDriver(AbstractDriver):
         ol_expr2 = create_index_expression('OL_D_ID',str(d_id))
         ol_expr3 = create_index_expression('OL_O_ID',str(o_id),LT)
         ol_expr4 = create_index_expression('OL_O_ID', str(int(o_id)-20),GTE)
-        clause2 = create_index_clause([ol_expr,ol_expr2])
+        clause2 = create_index_clause([ol_expr,ol_expr2,ol_expr3,ol_expr4])
         neworderline = self.order_linecf.get_indexed_slices(clause2)
         
         count = 0
