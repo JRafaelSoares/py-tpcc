@@ -15,6 +15,7 @@ setup(name='py-tpcc',
       url='http://www.cs.brown.edu/~pavlo/',
       license='BSD',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
+      data_files=[('', ['pytpcc/tpcc.sql'])],
       include_package_data=True,
       zip_safe=False,
       install_requires=[
