@@ -183,6 +183,8 @@ if __name__ == '__main__':
                          help='Instruct the driver to reset the contents of the database')
     aparser.add_argument('--scalefactor', default=1, type=float, metavar='SF',
                          help='Benchmark scale factor')
+    aparser.add_argument('--mix', default='4,4,4,43,45', metavar='SL,D,OS,P,NO',
+                         help='Transaction mix')
     aparser.add_argument('--skip-warehouses', default=0, type=int, metavar='SW',
                          help='Number of Warehouses previously loaded')
     aparser.add_argument('--warehouses', default=4, type=int, metavar='W',
@@ -240,6 +242,8 @@ if __name__ == '__main__':
     nurand = rand.setNURand(nurand.makeForLoad())
     if args['debug']: logging.debug("Scale Parameters:\n%s" % scaleParameters)
     scaleParameters.starting_warehouse = int(args['skip_warehouses'])+1
+
+    mix = [ int(i) for i in args['mix'].split(',') ]
     
     ## DATA LOADER!!!
     load_time = None
@@ -259,7 +263,7 @@ if __name__ == '__main__':
     ## WORKLOAD DRIVER!!!
     if not args['no_execute']:
         if args['clients'] == 1:
-            e = executor.Executor(driver, scaleParameters, stop_on_error=args['stop_on_error'])
+            e = executor.Executor(driver, scaleParameters, mix, stop_on_error=args['stop_on_error'])
             driver.executeStart()
             results = e.execute(args['duration'])
             driver.executeFinish()

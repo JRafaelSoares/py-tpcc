@@ -44,10 +44,11 @@ from util import *
 
 class Executor:
     
-    def __init__(self, driver, scaleParameters, stop_on_error = False):
+    def __init__(self, driver, scaleParameters, txnprob, stop_on_error = False):
         self.driver = driver
         self.scaleParameters = scaleParameters
         self.stop_on_error = stop_on_error
+        self.txnprob = [ sum(txnprob[:i+1]) for i in range(len(txnprob)) ]
     ## DEF
     
     def execute(self, duration):
@@ -88,19 +89,19 @@ class Executor:
         ## This is not strictly accurate: The requirement is for certain
         ## *minimum* percentages to be maintained. This is close to the right
         ## thing, but not precisely correct. See TPC-C 5.2.4 (page 68).
-        x = rand.number(1, 100)
+        x = rand.number(1, self.txnprob[4])
         params = None
         txn = None
-        if x <= 4: ## 4%
+        if x <= self.txnprob[0]: ## 4%
             txn, params = (constants.TransactionTypes.STOCK_LEVEL, self.generateStockLevelParams())
-        elif x <= 4 + 4: ## 4%
+        elif x <= self.txnprob[1]: ## 4%
             txn, params = (constants.TransactionTypes.DELIVERY, self.generateDeliveryParams())
-        elif x <= 4 + 4 + 4: ## 4%
+        elif x <= self.txnprob[2]: ## 4%
             txn, params = (constants.TransactionTypes.ORDER_STATUS, self.generateOrderStatusParams())
-        elif x <= 43 + 4 + 4 + 4: ## 43%
+        elif x <= self.txnprob[3]: ## 43%
             txn, params = (constants.TransactionTypes.PAYMENT, self.generatePaymentParams())
         else: ## 45%
-            assert x > 100 - 45
+            assert x > self.txnprob[3]
             txn, params = (constants.TransactionTypes.NEW_ORDER, self.generateNewOrderParams())
         
         return (txn, params)
