@@ -63,6 +63,9 @@ class Loader:
         ## Then create the warehouse-specific tuples
         for w_id in self.w_ids:
             self.loadWarehouse(w_id)
+        for w_id in self.w_ids:
+            self.loadDistricts(w_id)
+        for w_id in self.w_ids:
             self.handle.loadFinishWarehouse(w_id)
         ## FOR
         
@@ -119,6 +122,12 @@ class Loader:
             logging.debug("LOAD - %s [W_ID=%d]: %5d / %d" % (constants.TABLENAME_STOCK, w_id, total_tuples, self.scaleParameters.items))
             self.handle.loadTuples(constants.TABLENAME_STOCK, s_tuples)
 
+    ## ==============================================
+    ## loadDistricts
+    ## ==============================================
+    def loadDistricts(self, w_id):
+        logging.debug("LOAD - %s: %d / %d" % (constants.TABLENAME_WAREHOUSE, w_id, len(self.w_ids)))
+  
         ## DISTRICT
         d_tuples = [ ]
         for d_id in range(1, self.scaleParameters.districtsPerWarehouse+1):
