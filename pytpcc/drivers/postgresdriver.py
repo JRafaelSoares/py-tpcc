@@ -147,12 +147,14 @@ class PostgresDriver(AbstractDriver):
             self.cursor.execute("DROP SCHEMA IF EXISTS %s CASCADE"%self.schema)
             self.cursor.execute("CREATE SCHEMA %s"%self.schema)
             self.cursor.execute("DROP DOMAIN IF EXISTS TINYINT")
+            self.conn.commit()
 
         self.cursor.execute("select * from information_schema.tables where table_name=%s", ('order_line',))
         if self.cursor.rowcount <= 0:
             logging.debug("Loading DDL file '%s'" % (self.ddl))
             self.cursor.execute("CREATE DOMAIN TINYINT AS SMALLINT")
             self.cursor.execute(open(self.ddl, "r").read())
+            self.conn.commit()
 
     ## ----------------------------------------------
     ## loadTuples
@@ -163,7 +165,8 @@ class PostgresDriver(AbstractDriver):
         p = ["%s"]*len(tuples[0])
         sql = "INSERT INTO %s VALUES (%s)" % (tableName, ",".join(p))
         self.cursor.executemany(sql, tuples)
-        
+        self.conn.commit()
+
         logging.debug("Loaded %d tuples for tableName %s" % (len(tuples), tableName))
         return
 
