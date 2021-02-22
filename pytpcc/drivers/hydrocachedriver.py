@@ -1,5 +1,8 @@
-from abstractdriver import *
+from drivers.abstractdriver import *
 from cloudburst.client.client import CloudburstConnection
+from cloudburst.shared.serializer import Serializer
+
+from anna.lattices import MultiKeyCausalLattice
 #----------------------------------------------------------------------------
 # Hydrocache TPC-C Driver
 #
@@ -28,7 +31,7 @@ class HydrocacheDriver(AbstractDriver):
     # ------------------------------------------------------------------------
     def __init__(self, ddl):
         super(HydrocacheDriver,self).__init__("hydrocache",ddl)
-        self.database = None
+        self.cloudburst = None
     # End __init__()
 
     # ------------------------------------------------------------------------
@@ -42,6 +45,7 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doDelivery(self, params):
+        return
     # End doDelivery()
 
     # ------------------------------------------------------------------------
@@ -56,6 +60,7 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doOrderStatus(self, params):
+        return
     # End doOrderStatus
 
     # ------------------------------------------------------------------------
@@ -74,6 +79,7 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doPayment(self, params):
+        return
     # End doPayment
 
     # ------------------------------------------------------------------------
@@ -87,6 +93,7 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doStockLevel(self, params):
+        return
     # End doStockLevel
 
     # ------------------------------------------------------------------------
@@ -103,22 +110,26 @@ class HydrocacheDriver(AbstractDriver):
         client_id = config['client_id']
         local = config['local']
 
-        self.database = CloudburstConnection(func_address, client_ip, client_id, local)
+        self.cloudburst = CloudburstConnection(func_address, client_ip, client_id, local)
 
         if config['reset']:
             #TODO - Flush all Anna database
+            print("asd")
+        return
     # End loadConfig
 
     # ------------------------------------------------------------------------
     # Post-processing function for data loading
     # ------------------------------------------------------------------------
     def loadFinish(self):
+        return
     # End loadFinish
 
     # ------------------------------------------------------------------------
     # Pre-pocessing function for data loading
     # ------------------------------------------------------------------------
     def loadStart(self):
+        return
     # End loadStart
 
     # ------------------------------------------------------------------------
@@ -128,6 +139,56 @@ class HydrocacheDriver(AbstractDriver):
     # @param list of tuples corresponding to table schema
     # ------------------------------------------------------------------------
     def loadTuples(self, tableName, tuples):
+        serializer = Serializer()
+        if tableName == 'WAREHOUSE' :
+            for row in tuples:
+                base_key = 'WAREHOUSE:%s:' % row[0]
+                self.cloudburst.kvs_client.put(base_key+"W_ID",
+                                               serializer.dump_lattice(row[0], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_NAME",
+                                               serializer.dump_lattice(row[1], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_STREET_1",
+                                               serializer.dump_lattice(row[2], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_STREET_2",
+                                               serializer.dump_lattice(row[3], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_CITY",
+                                               serializer.dump_lattice(row[4], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_STATE",
+                                               serializer.dump_lattice(row[5], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_ZIP",
+                                               serializer.dump_lattice(row[6], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_TAX",
+                                               serializer.dump_lattice(row[7], MultiKeyCausalLattice))
+                self.cloudburst.kvs_client.put(base_key+"W_YTD",
+                                               serializer.dump_lattice(row[8], MultiKeyCausalLattice))
+
+        elif tableName == 'DISTRICT':
+            return
+
+        elif tableName == 'CUSTOMER':
+            return
+
+        elif tableName == 'HISTORY':
+            return
+
+        elif tableName == 'STOCK':
+            return
+
+        elif tableName == 'ORDERS':
+            return
+
+        elif tableName == 'NEW_ORDER':
+            return
+
+        elif tableName == 'ORDER_LINE':
+            return
+
+        elif tableName == 'ITEMS':
+            return
+
+    #lattice = serializer.dump_lattice(value, MultiKeyCausalLattice)
+    #print("Inserting key " + key)
+    #cloudburst.kvs_client.put(key, lattice)
     # End loadTuples
 
     # ------------------------------------------------------------------------
