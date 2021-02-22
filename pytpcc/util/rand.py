@@ -30,7 +30,7 @@
 # -----------------------------------------------------------------------
 
 import random
-import nurand
+import util.nurand
 
 SYLLABLES = [ "BAR", "OUGHT", "ABLE", "PRI", "PRES", "ESE", "ANTI", "CALLY", "ATION", "EING" ]
 
@@ -45,7 +45,7 @@ def NURand(a, x, y):
     global nurandVar
     assert x <= y
     if nurandVar is None:
-		setNURand(nurand.makeForLoad())
+        setNURand(util.nurand.makeForLoad())
     
     if a == 255:
         c = nurandVar.cLast
@@ -95,7 +95,7 @@ def fixedPoint(decimal_places, minimum, maximum):
 
 def selectUniqueIds(numUnique, minimum, maximum):
     rows = set()
-    for i in range(0, numUnique):
+    for i in range(0, int(round(numUnique))):
         index = None
         while index == None or index in rows:
             index = number(minimum, maximum)
