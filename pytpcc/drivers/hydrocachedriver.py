@@ -6,6 +6,15 @@ from cloudburst.client.client import CloudburstConnection
 from cloudburst.shared.serializer import Serializer
 from cloudburst.shared.reference import CloudburstReference
 from anna.lattices import MultiKeyCausalLattice
+from cloudburst.shared.proto.cloudburst_pb2 import (
+    Continuation,
+    DagTrigger,
+    FunctionCall,
+    NORMAL, MULTI,  # Cloudburst's consistency modes,
+    EXECUTION_ERROR, FUNC_NOT_FOUND,  # Cloudburst's error types
+    MULTIEXEC # Cloudburst's execution types
+)
+import constants
 
 logging.basicConfig(level = logging.INFO,
                     format="%(asctime)s [%(funcName)s:%(lineno)03d] %(levelname)-5s: %(message)s",
@@ -92,7 +101,6 @@ class HydrocacheDriver(AbstractDriver):
         w_id = params["w_id"]
         d_id = params["d_id"]
         c_id = params["c_id"]
-        o_entry_d = params["o_entry_d"]
         i_ids = params["i_ids"]
         i_w_ids = params["i_w_ids"]
         i_qtys = params["i_qtys"]
@@ -117,7 +125,7 @@ class HydrocacheDriver(AbstractDriver):
             items.append(CloudburstReference(item_key + 'I_PRICE', True))
             items.append(CloudburstReference(item_key + 'I_NAME', True))
             items.append(CloudburstReference(item_key + 'I_DATA', True))
-        args.extend(items)
+        args.append(items)
         args.append(all_local)
 
         # ------------------------------
@@ -132,6 +140,14 @@ class HydrocacheDriver(AbstractDriver):
         district_key = "DISTRICT.%s.%s." % (w_id, d_id)
         args.append(CloudburstReference(district_key + "D_TAX", True))
         args.append(CloudburstReference(district_key + "D_NEXT_O_ID", True))
+
+        # ------------------------------------------
+        # Get Client Information And Discount
+        # ------------------------------------------
+        customer_info = []
+        customer_key = "CUSTOMER.%s.%s.%s." % (w_id, d_id, c_id)
+        args.append(customer_info)
+        args.append(CloudburstReference(customer_key + "C_DISCOUNT", True))
 
         # --------------------------------
         # Get Stock Information Query
@@ -150,7 +166,9 @@ class HydrocacheDriver(AbstractDriver):
                 stocks.append(CloudburstReference(stock_key + 'S_DIST_' + str(d_id), True))
         args.extend(stocks)
 
-        result = self.doNewOrderDAG(params)
+        dag_name = "doNewOrderDag"
+        request = {"doNewOrder": args}
+        result = self.cloudburst.call_dag(dag_name, request, consistency=MULTI, output_key="output_key", direct_response=True)
 
         if self.debug['new-order'] != 'None':
             logging.info('TXN NEW ORDER FINISHED -----------------')
@@ -239,6 +257,10 @@ class HydrocacheDriver(AbstractDriver):
         # Store Metadata
         for table, next in self.next_scores.items():
             self.metadata[table + '.next_score'] = next
+
+        self.cloudburst.kvs_client.put("output_key", self.getKeyLattice(0))
+        self.cloudburst.register(doNewOrder, "doNewOrder")
+        self.cloudburst.register_dag("doNewOrderDag", ["doNewOrder"], [])
     # End loadFinish
 
     # ------------------------------------------------------------------------
@@ -442,6 +464,9 @@ class HydrocacheDriver(AbstractDriver):
 #       WAREHOUSE.w_id.W_TAX - Tax value of warehouse
 #       DISTRICT.w_id.d_id.D_TAX - Tax value of district
 #       DISTRICT.w_id.d_id.D_NEXT_O_ID - District next ordered ID
+#       CLIENT_INFO:
+#           all information of client
+#       CLIENT.w_id.d_id.c_id.C_DISCOUNT - Client Discount
 #       STOCKS: - List of Stocks
 #           STOCK.i_w_id.i_id.S_QUANTITY
 #           STOCK.i_w_id.i_id.S_YTD
@@ -453,8 +478,149 @@ class HydrocacheDriver(AbstractDriver):
 # @return
 # ------------------------------------------------------------------------
 
-def doNewOrderDAG(cloudburst, params, items, all_local, w_tax, d_tax, d_next_o_id, stocks):
-    # Increment district next order id
 
-    return
+def doNewOrder(cloudburst, write_set, params, items, all_local, w_tax, d_tax, d_next_o_id, customer_info, c_discount, stocks):
+    w_id = params["w_id"]
+    d_id = params["d_id"]
+    c_id = params["c_id"]
+    o_entry_d = params["o_entry_d"]
+    i_ids = params["i_ids"]
+    i_w_ids = params["i_w_ids"]
+    i_qtys = params["i_qtys"]
+
+    # -------------------------------
+    # Increment Next Order ID Query
+    # -------------------------------
+    district_key = "DISTRICT.%s.%s." % (w_id, d_id)
+    district_next_order_id_key = district_key + 'D_NEXT_O_ID'
+    cloudburst.write(write_set, district_next_order_id_key, d_next_o_id+1)
+
+    # --------------------
+    # Create Order Query
+    # --------------------
+    order_key = "ORDERS.%s.%s.%s." % (w_id, d_id, d_next_o_id)
+    ol_cnt = len(i_ids)
+    cloudburst.write(write_set, order_key + "O_ID", d_next_o_id)
+    cloudburst.write(write_set, order_key + "O_D_ID", d_id)
+    cloudburst.write(write_set, order_key + "O_W_ID", w_id)
+    cloudburst.write(write_set, order_key + "O_C_ID", c_id)
+    cloudburst.write(write_set, order_key + "O_C_ID", c_id)
+    cloudburst.write(write_set, order_key + "O_ENTRY_D", o_entry_d)
+    cloudburst.write(write_set, order_key + "O_CARRIER_ID", constants.NULL_CARRIER_ID)
+    cloudburst.write(write_set, order_key + "O_OL_CNT", ol_cnt)
+    cloudburst.write(write_set, order_key + "O_ALL_LOCAL", all_local)
+
+    # Add index for Order searching
+    # si_key = self.safeKey([w_id, d_id, c_id])
+    # wtr.sadd('ORDERS.INDEXES.ORDERSEARCH', si_key)
+    # TODO - Do we need this?
+
+    # ------------------------
+    # Create New Order Query
+    # ------------------------
+    new_order_key = "NEW_ORDER.%s.%s.%s." % (d_next_o_id, w_id, d_id)
+    cloudburst.write(write_set, new_order_key + "NO_O_ID", d_next_o_id)
+    cloudburst.write(write_set, new_order_key + "NO_D_ID", d_id)
+    cloudburst.write(write_set, new_order_key + "NO_W_ID", w_id)
+
+    # Add index for New Order Searching
+    # si_key = self.safeKey([d_id, w_id])
+    # wtr.sadd('NEW_ORDER.INDEXES.GETNEWORDER', si_key)
+    # TODO - Do we need this?
+
+    # -------------------------------
+    # Insert Order Item Information
+    # -------------------------------
+    item_data = []
+    total = 0
+
+    ol_number = []
+    ol_quantity = []
+    ol_supply_w_id = []
+    ol_i_id = []
+    i_name = []
+    i_price = []
+    i_data = []
+    stock_key = []
+
+    for i in range(len(i_ids)):
+        ol_number.append(i + 1)
+        ol_supply_w_id.append(i_w_ids[i])
+        ol_i_id.append(i_ids[i])
+        ol_quantity.append(i_qtys[i])
+
+        i_price.append(float(items[i*3]))
+        i_name.append(items[i*3 + 1])
+        i_data.append(items[i*3 + 2])
+        stock_key.append("%s.%s." % (ol_supply_w_id[i], ol_i_id[i]))
+
+    # We divide by 6 since for each stock we obtained 6 keys
+    for i in range(len(stocks) // 6):
+        s_quantity = float(stocks[i*6])
+        s_ytd = float(stocks[i*6 + 1])
+        s_order_cnt = float(stocks[i*6 + 2])
+        s_remote_cnt = float(stocks[i*6 + 3])
+        s_data = stocks[i*6 + 4]
+        s_dist_xx = stocks[i*6 + 5]
+
+        s_ytd += ol_quantity[i]
+
+        if s_quantity >= ol_quantity[i] + 10:
+            s_quantity = s_quantity - ol_quantity[i]
+        else:
+            s_quantity = s_quantity + 91 - ol_quantity[i]
+        s_order_cnt += 1
+
+        if ol_supply_w_id[i] != w_id:
+            s_remote_cnt += 1
+
+        current_stock_key = "STOCK.%s." % stock_key[i]
+
+        cloudburst.write(write_set, current_stock_key + "S_QUANTITY", s_quantity)
+        cloudburst.write(write_set, current_stock_key + "S_YTD", s_ytd)
+        cloudburst.write(write_set, current_stock_key + "S_ORDER_CNT", s_order_cnt)
+        cloudburst.write(write_set, current_stock_key + "S_REMOTE_CNT", s_remote_cnt)
+
+        if i_data[i].find(constants.ORIGINAL_STRING) != -1 and s_data.find(constants.ORIGINAL_STRING) != -1:
+            brand_generic = 'B'
+        else:
+            brand_generic = 'G'
+
+        ## Transaction profile states to use "ol_quantity * i_price"
+        ol_amount = ol_quantity[i] * i_price[i]
+        total += ol_amount
+
+        # -------------------------
+        # Create Order Line Query
+        # -------------------------
+        order_line_key = "ORDER_LINE.%s.%s.%s.%s." % (w_id, d_id, d_next_o_id, ol_number)
+
+        cloudburst.write(write_set, order_line_key + "OL_O_ID", d_next_o_id)
+        cloudburst.write(write_set, order_line_key + "OL_D_ID", d_id)
+        cloudburst.write(write_set, order_line_key + "OL_W_ID", w_id)
+        cloudburst.write(write_set, order_line_key + "OL_NUMBER", ol_number[i])
+        cloudburst.write(write_set, order_line_key + "OL_I_ID", ol_i_id[i])
+        cloudburst.write(write_set, order_line_key + "OL_SUPPLY_W_ID", ol_supply_w_id[i])
+        cloudburst.write(write_set, order_line_key + "OL_DELIVERY_D", o_entry_d)
+        cloudburst.write(write_set, order_line_key + "OL_QUANTITY", ol_quantity[i])
+        cloudburst.write(write_set, order_line_key + "OL_AMOUNT", ol_amount)
+        cloudburst.write(write_set, order_line_key + "OL_DISTRICT_INFO", s_dist_xx)
+
+        # Create index for Order Line Searching
+        # wtr.sadd(
+        #    'ORDER_LINE.INDEXES.SUMOLAMOUNT.' + si_key,
+        #   order_line_key
+        # )
+        # TODO - Is this necessary?
+
+        item_data.append( (i_name, s_quantity, brand_generic, i_price, ol_amount) )
+    ## End for i in range(len(stocks) // 6):
+
+    ## Adjust the total for the discount
+    total *= (1 - c_discount) * (1 + w_tax + d_tax)
+
+    ## Pack up values the client is missing (see TPC-C 2.4.3.5)
+    misc = [(w_tax, d_tax, d_next_o_id, total)]
+
+    return [customer_info, misc, item_data]
 # End doNewOrderDag
