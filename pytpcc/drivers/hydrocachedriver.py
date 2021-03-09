@@ -24,6 +24,14 @@ logging.basicConfig(level = logging.INFO,
 doNewOrderDagName = 'doNewOrderDag'
 doNewOrderFunctionName = 'doNewOrderFunction'
 
+# doDelivery Names
+doDeliveryDagName = 'doDeliveryDag'
+getNewOrderIndexName = 'getNewOrderIndex'
+getNewOrdersName = 'getNewOrders'
+getCustomerIDName = 'getCustomerID'
+getOrderLineSumName = 'getOrderLineSum'
+doDeliveryFunctionName = 'doDeliveryFunction'
+
 class HydrocacheDriver(AbstractDriver):
 
     DEFAULT_CONFIG = {
@@ -59,8 +67,9 @@ class HydrocacheDriver(AbstractDriver):
         }
         self.customer_indexes = {}
         self.order_indexes = {}
-        self.new_order_indexes = {}
         self.order_line_indexes = {}
+
+        self.new_order_ids = []
 
         # Debugging
         self.loaded_items = {}
@@ -79,8 +88,9 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doDelivery(self, params):
+        print('TXN DELIVERY STARTING ------------------')
+        tt = time.time()
         if self.debug['delivery'] != 'None':
-            print('TXN DELIVERY STARTING ------------------')
             tt = time.time()
         if self.debug['delivery'] == 'Verbose':
             t0 = tt
@@ -90,21 +100,33 @@ class HydrocacheDriver(AbstractDriver):
         o_carrier_id = params["o_carrier_id"]
         ol_delivery_d = params["ol_delivery_d"]
 
-        args = []
+        # getNewOrderIndex arguments
+        getNewOrderIndexArgs = []
+        getNewOrderIndexArgs.append(constants.DISTRICTS_PER_WAREHOUSE)
+        getNewOrderIndexArgs.append(w_id)
 
-        # Get districts per warehouse constant
-        args.append(constants.DISTRICTS_PER_WAREHOUSE)
+        # getNewOrders arguments
+        getNewOrdersArgs = []
+        getNewOrdersArgs.append(constants.DISTRICTS_PER_WAREHOUSE)
 
-        # ---------------------
-        # Get New Order Query
-        # ---------------------
-        new_order_indexes = []
-        new_order_index_key = 'NEW_ORDER.INDEXES.GETNEWORDER.%s.' % w_id
-        for d_id in range(1, constants.DISTRICTS_PER_WAREHOUSE + 1):
-            # Get set of possible new order ids
-            new_order_indexes.append(CloudburstReference(new_order_index_key + d_id, True))
-        args.append(new_order_indexes)
-        return
+        # getCustomerID arguments (reuse getNewOrderIndexArgs)
+
+        # getOrderLineSums (reuse getNewOrderIndex)
+
+        # doDeliveryFunction
+        doDeliveryFunctionArgs = []
+        doDeliveryFunctionArgs.append(params)
+        doDeliveryFunctionArgs.append(constants.DISTRICTS_PER_WAREHOUSE)
+        doDeliveryFunctionArgs.append(CloudburstReference('NEW_ORDER.IDS', True))
+
+        request = {getNewOrderIndexName: getNewOrderIndexArgs, getNewOrdersName: getNewOrdersArgs,
+                   getCustomerIDName: getNewOrderIndexArgs, getOrderLineSumName: getNewOrderIndexArgs,
+                   doDeliveryFunctionName: doDeliveryFunctionArgs}
+        result = self.cloudburst.call_dag(doDeliveryDagName, request, consistency=MULTI, output_key="output_key",
+                                          direct_response=True)
+
+        print('TXN DELIVERY ENDED: ' + str(time.time() - tt))
+        return result
     # End doDelivery()
 
     # ------------------------------------------------------------------------
@@ -327,6 +349,7 @@ class HydrocacheDriver(AbstractDriver):
         for table, next in self.next_scores.items():
             self.metadata[table + '.next_score'] = next
 
+        self.cloudburst.kvs_client.put('NEW_ORDER.IDS', self.getKeyLattice(self.new_order_ids))
 
         # Add Special Index for Customer Table
         for index_key in self.customer_indexes:
@@ -430,9 +453,9 @@ class HydrocacheDriver(AbstractDriver):
                 self.cloudburst.kvs_client.put('ORDERS.INDEXES.ORDERSEARCH.%s.%s.%s' % (row[2], row[1], row[0]), self.getKeyLattice([]))
                 index_key = 'CUSTOMER.INDEXES.NAMESEARCH.%s.%s.%s' % (row[2], row[1], row[5])
                 if index_key in self.customer_indexes:
-                    self.customer_indexes[index_key].extend([base_key])
+                    self.customer_indexes[index_key].append(base_key)
                 else:
-                    self.customer_indexes[index_key] = list(base_key)
+                    self.customer_indexes[index_key] = [base_key]
 
 
 
@@ -473,20 +496,20 @@ class HydrocacheDriver(AbstractDriver):
 
         elif tableName == 'ORDERS':
             for row in tuples:
-                base_key = 'ORDER.%s.%s.%s.' % (row[2], row[1], row[0])
+                base_key = 'ORDER.%s.%s.%s.' % (row[3], row[2], row[0])
                 self.cloudburst.kvs_client.put(base_key + "O_ID", self.getKeyLattice(row[0]))
-                self.cloudburst.kvs_client.put(base_key + "O_D_ID", self.getKeyLattice(row[1]))
-                self.cloudburst.kvs_client.put(base_key + "O_W_ID", self.getKeyLattice(row[2]))
-                self.cloudburst.kvs_client.put(base_key + "O_C_ID", self.getKeyLattice(row[3]))
+                self.cloudburst.kvs_client.put(base_key + "O_C_ID", self.getKeyLattice(row[1]))
+                self.cloudburst.kvs_client.put(base_key + "O_D_ID", self.getKeyLattice(row[2]))
+                self.cloudburst.kvs_client.put(base_key + "O_W_ID", self.getKeyLattice(row[3]))
                 self.cloudburst.kvs_client.put(base_key + "O_ENTRY_D", self.getKeyLattice(row[4]))
                 self.cloudburst.kvs_client.put(base_key + "O_CARRIER_ID", self.getKeyLattice(row[5]))
                 self.cloudburst.kvs_client.put(base_key + "O_OL_CNT", self.getKeyLattice(row[6]))
                 self.cloudburst.kvs_client.put(base_key + "O_ALL_LOCAL", self.getKeyLattice(row[7]))
-                index_key = 'ORDERS.INDEXES.ORDERSEARCH.%s.%s.%s' % (row[2], row[1], row[3])
+                index_key = 'ORDERS.INDEXES.ORDERSEARCH.%s.%s.%s' % (row[3], row[2], row[1])
                 if index_key in self.order_indexes:
-                    self.order_indexes[index_key].extend([base_key])
+                    self.order_indexes[index_key].append(base_key)
                 else:
-                    self.order_indexes[index_key] = list(base_key)
+                    self.order_indexes[index_key] = [base_key]
 
         elif tableName == 'NEW_ORDER':
             for row in tuples:
@@ -496,8 +519,10 @@ class HydrocacheDriver(AbstractDriver):
                 self.cloudburst.kvs_client.put(base_key + "NO_W_ID", self.getKeyLattice(row[2]))
                 index_key = 'NEW_ORDER.INDEXES.GETNEWORDER.%s.%s' % (row[2], row[1])
                 self.cloudburst.kvs_client.put(index_key, self.getKeyLattice(base_key))
+                self.new_order_ids.append(base_key)
 
         elif tableName == 'ORDER_LINE':
+            base_key_list = {}
             for row in tuples:
                 base_key = 'ORDER_LINE.%s.%s.%s.%s.' % (row[2], row[1], row[0], row[3])
                 self.cloudburst.kvs_client.put(base_key + "OL_O_ID", self.getKeyLattice(row[0]))
@@ -511,7 +536,13 @@ class HydrocacheDriver(AbstractDriver):
                 self.cloudburst.kvs_client.put(base_key + "OL_AMOUNT", self.getKeyLattice(row[8]))
                 self.cloudburst.kvs_client.put(base_key + "OL_DIST_INFO", self.getKeyLattice(row[9]))
                 index_key = 'ORDER_LINE.INDEXES.SUMOLAMOUNT.%s.%s.%s' % (row[0], row[1], row[2])
-                self.cloudburst.kvs_client.put(index_key, self.getKeyLattice(base_key))
+                if index_key in base_key_list:
+                    base_key_list[index_key].append(base_key)
+                else:
+                    base_key_list[index_key] = [base_key]
+
+            for index_key in base_key_list:
+                self.cloudburst.kvs_client.put(index_key, self.getKeyLattice(base_key_list[index_key]))
 
         elif tableName == 'ITEM':
             for row in tuples:
