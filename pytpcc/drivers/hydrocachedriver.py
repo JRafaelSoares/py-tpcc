@@ -43,6 +43,15 @@ getOrderLinesIndexesName = 'getOrderLinesIndexes'
 getOrderLinesName = 'getOrderLines'
 doOrderStatusFunctionName = 'doOrderStatusFunction'
 
+# doStockLevel
+doStockLevelDagName = 'doStockLevelDag'
+
+getOrderIDName = 'getOrderID'
+getStockCountName = 'getStockCount'
+getOrderLinesStockLevelName = 'getOrderLinesStockLevel'
+getStocksName = 'getStocks'
+doStockLevelFunctionName = 'doStockLevelFunction'
+
 class HydrocacheDriver(AbstractDriver):
 
     DEFAULT_CONFIG = {
@@ -375,7 +384,14 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doStockLevel(self, params):
-        return
+        print('TXN STOCK LEVEL STARTING --------------')
+        tt = time.time()
+        request = {getOrderIDName: [params], getStockCountName: [params],
+                   getStocksName: [params], doStockLevelFunctionName: [params]}
+        result = self.cloudburst.call_dag(doStockLevelDagName, request, consistency=MULTI,
+                                          output_key="output_key", direct_response=True)
+        print('TXN STOCK LEVEL FINISHED: ' + str(time.time() - tt))
+        return result
     # End doStockLevel
 
     # ------------------------------------------------------------------------

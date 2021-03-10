@@ -62,6 +62,22 @@ doOrderStatusClientIndexConnections = [(getClientByLastNameFunctionName, getClie
                                        (getLastOrderName, getOrdersName), (getOrdersName, getOrderLinesIndexesName),
                                        (getOrderLinesIndexesName, getOrderLinesName),
                                        (getOrderLinesName, doOrderStatusFunctionName)]
+
+# doStockLevel
+doStockLevelDagName = 'doStockLevelDag'
+
+getOrderIDName = 'getOrderID'
+getStockCountName = 'getStockCount'
+getOrderLinesStockLevelName = 'getOrderLinesStockLevel'
+getStocksName = 'getStocks'
+doStockLevelFunctionName = 'doStockLevelFunction'
+
+doStockLevelFunctions = [getOrderIDName, getStockCountName, getOrderLinesStockLevelName,
+                         getStocksName, doStockLevelFunctionName]
+
+doStockLevelConnections = [(getOrderIDName, getStockCountName), (getStockCountName, getOrderLinesStockLevelName),
+                           (getOrderLinesStockLevelName, getStocksName), (getStocksName, doStockLevelFunctionName)]
+
 #----------------------------------------------------------------------------
 # Hydrocache TPC-C Driver
 #
@@ -558,8 +574,61 @@ def getOrderLines(cloudburst, write_set, client, order, order_line_index):
 def doOrderStatusFunction(cloudburst, write_set, client, order, order_lines):
     return [client, order, order_lines]
 
+#----------------------------------------------------------------------------
+# doPayment Transaction
+#----------------------------------------------------------------------------
 
+#----------------------------------------------------------------------------
+# doStockLevel Transaction
+#----------------------------------------------------------------------------
 
+def getOrderID(cloudburst, write_set, params):
+    # Initialize transaction parameters
+    w_id = params["w_id"]
+    d_id = params["d_id"]
+
+    district_key = 'DISTRICT.%s.%s.' % (w_id, d_id)
+
+    return CloudburstReference(district_key + 'D_NEXT_O_ID', True)
+
+def getStockCount(cloudburst, write_set, params, next_o_id):
+    w_id = params["w_id"]
+    d_id = params["d_id"]
+    order_lines = []
+    for o_id in range(next_o_id-20, next_o_id):
+        order_line_key = 'ORDER_LINE.INDEXES.SUMOLAMOUNT.%s.%s.%s' % (o_id, d_id, w_id)
+        order_lines.append(CloudburstReference(order_line_key, True))
+    return order_lines
+
+def getOrderLinesStockLevel(cloudburst, write_set, order_lines_index):
+    items = []
+    for order_lines in order_lines_index:
+        for order_line in order_lines:
+            items.append(CloudburstReference(order_line + 'OL_I_ID', True))
+
+    return items
+
+def getStocks(cloudburst, write_set, params, items):
+    w_id = params["w_id"]
+    unique_items = []
+    [unique_items.append(x) for x in items if x not in unique_items]
+
+    stocks = []
+    for item in unique_items:
+        stock_key = 'STOCK.%s.%s.' % (w_id, item)
+        stocks.append(CloudburstReference(stock_key + 'S_QUANTITY', True))
+
+    return stocks
+
+def doStockLevelFunction(cloudburst, write_set, params, stocks):
+    threshold = params["threshold"]
+    stock_counts = {}
+    stock_count = 0
+    for stock_quantity in stocks:
+        if stock_quantity < threshold:
+            stock_count += 1
+
+    return stock_count
 
 
 value_output = 1
@@ -594,6 +663,13 @@ cloudburst.register(getOrderLinesIndexes, getOrderLinesIndexesName)
 cloudburst.register(getOrderLines, getOrderLinesName)
 cloudburst.register(doOrderStatusFunction, doOrderStatusFunctionName)
 
+# Register doStockLevel functions
+cloudburst.register(getOrderID, getOrderIDName)
+cloudburst.register(getStockCount, getStockCountName)
+cloudburst.register(getOrderLinesStockLevel, getOrderLinesStockLevelName)
+cloudburst.register(getStocks, getStocksName)
+cloudburst.register(doStockLevelFunction, doStockLevelFunctionName)
+
 print("Registering dag")
 # Register doNewOrderDag
 success, error = cloudburst.register_dag(doNewOrderDagName, functions, connections)
@@ -610,5 +686,11 @@ success, error = cloudburst.register_dag(doOrderStatusClientDagName, doOrderStat
 # Register doOrderStatusClientDag
 success, error = cloudburst.register_dag(doOrderStatusClientIndexDagName, doOrderStatusClientIndexFunctions,
                                          doOrderStatusClientIndexConnections)
+print("Registered doOrderStatusDags")
+
+# Register doStockLevelDag
+success, error = cloudburst.register_dag(doStockLevelDagName, doStockLevelFunctions,
+                                         doStockLevelConnections)
+print("Registered doStockLevelDag")
 
 print("Registered dags")
