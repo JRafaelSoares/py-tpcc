@@ -32,6 +32,17 @@ getCustomerIDName = 'getCustomerID'
 getOrderLineSumName = 'getOrderLineSum'
 doDeliveryFunctionName = 'doDeliveryFunction'
 
+# doOrderNames
+doOrderStatusClientDagName = 'doOrderStatusClientDag'
+doOrderStatusClientIndexDagName = 'doOrderStatusClientIndexDagName'
+getClientByLastNameFunctionName = 'getClientByLastName'
+getClientByFirstNameFunctionName = 'getClientByFirstName'
+getLastOrderName = 'getLastOrder'
+getOrdersName = 'getOrders'
+getOrderLinesIndexesName = 'getOrderLinesIndexes'
+getOrderLinesName = 'getOrderLines'
+doOrderStatusFunctionName = 'doOrderStatusFunction'
+
 class HydrocacheDriver(AbstractDriver):
 
     DEFAULT_CONFIG = {
@@ -274,7 +285,64 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doOrderStatus(self, params):
-        return
+        print('TXN ORDER STATUS STARTING --------------')
+        tt = time.time()
+
+        args = []
+        # Initialize transactions parameters
+        w_id = params["w_id"]
+        d_id = params["d_id"]
+        c_id = params["c_id"]
+        c_last = params["c_last"]
+
+        # We must use two different dags for the case of having a Client ID or not.
+        if c_id != None:
+            # -----------------------------------
+            # Get Customer By Customer ID Query
+            # -----------------------------------
+            customer = []
+            customer_key = 'CUSTOMER.%s.%s.%s.' % (w_id, d_id, c_id)
+            customer.append(CloudburstReference(customer_key + "C_ID", True))
+            customer.append(CloudburstReference(customer_key + "C_D_ID", True))
+            customer.append(CloudburstReference(customer_key + "C_W_ID", True))
+            customer.append(CloudburstReference(customer_key + "C_FIRST", True))
+            customer.append(CloudburstReference(customer_key + "C_MIDDLE", True))
+            customer.append(CloudburstReference(customer_key + "C_LAST", True))
+            customer.append(CloudburstReference(customer_key + "C_STREET_1", True))
+            customer.append(CloudburstReference(customer_key + "C_STREET_2", True))
+            customer.append(CloudburstReference(customer_key + "C_CITY", True))
+            customer.append(CloudburstReference(customer_key + "C_ZIP", True))
+            customer.append(CloudburstReference(customer_key + "C_PHONE", True))
+            customer.append(CloudburstReference(customer_key + "C_SINCE", True))
+            customer.append(CloudburstReference(customer_key + "C_CREDIT", True))
+            customer.append(CloudburstReference(customer_key + "C_CREDIT_LIM", True))
+            customer.append(CloudburstReference(customer_key + "C_DISCOUNT", True))
+            customer.append(CloudburstReference(customer_key + "C_BALANCE", True))
+            customer.append(CloudburstReference(customer_key + "C_YTD_PAYMENT", True))
+            customer.append(CloudburstReference(customer_key + "C_PAYMENT_CNT", True))
+            customer.append(CloudburstReference(customer_key + "C_DELIVERY_CNT", True))
+            customer.append(CloudburstReference(customer_key + "C_DATA", True))
+
+            args.append(params)
+            args.append(customer)
+
+            request = {getLastOrderName: args, getOrderLinesIndexesName: [params]}
+            result = self.cloudburst.call_dag(doOrderStatusClientDagName, request, consistency=MULTI,
+                                              output_key="output_key", direct_response=True)
+
+        else:
+            # ----------------------------------
+            # Get Customers By Last Name Query
+            # ----------------------------------
+            customer_last_name = 'CUSTOMER.INDEXES.NAMESEARCH.%s.%s.%s' % (w_id, d_id, c_last)
+            args.append(CloudburstReference(customer_last_name, True))
+            request = {getClientByLastNameFunctionName: args,
+                       getLastOrderName: [params], getOrderLinesIndexesName: [params]}
+            result = self.cloudburst.call_dag(doOrderStatusClientIndexDagName, request, consistency=MULTI,
+                                              output_key="output_key", direct_response=True)
+
+        print('TXN ORDER STATUS FINISHED: ' + str(time.time() - tt))
+        return result
     # End doOrderStatus
 
     # ------------------------------------------------------------------------

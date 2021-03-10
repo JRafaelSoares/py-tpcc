@@ -34,6 +34,34 @@ doDeliveryFunctions = [getNewOrderIndexName, getNewOrdersName, getCustomerIDName
                        doDeliveryFunctionName]
 doDeliveryConnections = [(getNewOrderIndexName, getNewOrdersName), (getNewOrdersName, getCustomerIDName),
                          (getCustomerIDName, getOrderLineSumName), (getOrderLineSumName, doDeliveryFunctionName)]
+
+# doOrderStatus
+doOrderStatusClientDagName = 'doOrderStatusClientDag'
+doOrderStatusClientIndexDagName = 'doOrderStatusClientIndexDagName'
+
+getClientByLastNameFunctionName = 'getClientByLastName'
+getClientByFirstNameFunctionName = 'getClientByFirstName'
+getLastOrderName = 'getLastOrder'
+getOrdersName = 'getOrders'
+getOrderLinesIndexesName = 'getOrderLinesIndexes'
+getOrderLinesName = 'getOrderLines'
+doOrderStatusFunctionName = 'doOrderStatusFunction'
+
+doOrderStatusClientFunctions = [getLastOrderName, getOrdersName, getOrderLinesIndexesName,
+                                getOrderLinesName, doOrderStatusFunctionName]
+doOrderStatusClientConnections = [(getLastOrderName, getOrdersName), (getOrdersName, getOrderLinesIndexesName),
+                                  (getOrderLinesIndexesName, getOrderLinesName),
+                                  (getOrderLinesName, doOrderStatusFunctionName)]
+
+doOrderStatusClientIndexFunctions = [getClientByLastNameFunctionName, getClientByFirstNameFunctionName,
+                                     getLastOrderName, getOrdersName, getOrderLinesIndexesName,
+                                     getOrderLinesName, doOrderStatusFunctionName]
+
+doOrderStatusClientIndexConnections = [(getClientByLastNameFunctionName, getClientByFirstNameFunctionName),
+                                       (getClientByFirstNameFunctionName, getLastOrderName),
+                                       (getLastOrderName, getOrdersName), (getOrdersName, getOrderLinesIndexesName),
+                                       (getOrderLinesIndexesName, getOrderLinesName),
+                                       (getOrderLinesName, doOrderStatusFunctionName)]
 #----------------------------------------------------------------------------
 # Hydrocache TPC-C Driver
 #
@@ -41,6 +69,9 @@ doDeliveryConnections = [(getNewOrderIndexName, getNewOrdersName), (getNewOrders
 # @author Rafael Soares <joao.rafael.pinto.soares@tecnico.ulisboa.pt>
 #----------------------------------------------------------------------------
 
+#----------------------------------------------------------------------------
+# DoDelivery Transaction
+#----------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------
 # Get New Order Index List
@@ -247,12 +278,18 @@ def doDeliveryFunction(cloudburst, write_set, params, dpw, new_order_ids, no_o_i
     return result
 # End doDelivery()
 
+
+
+#----------------------------------------------------------------------------
+# DoNew Order Transaction
+#----------------------------------------------------------------------------
+
 # ------------------------------------------------------------------------
 # doNewOrder transaction to be registered and executed by cloudburst
 #
 #   Arg_list:
 #       params - Parameters seen on top
-#       ITEMS: - i_ids number of iteems
+#       ITEMS: - i_ids number of items
 #           ITEM.i_id.I_PRICE
 #           ITEM.i_id.I_NAME
 #           ITEM.i_id.I_DATA
@@ -273,7 +310,6 @@ def doDeliveryFunction(cloudburst, write_set, params, dpw, new_order_ids, no_o_i
 #
 # @return
 # ------------------------------------------------------------------------
-
 
 def doNewOrderFunction(cloudburst, write_set, params, items, all_local, w_tax, d_tax, d_next_o_id, customer_info,
                        c_discount, order_search_index, stocks, constant_null_carrier_id, constant_original_string):
@@ -416,6 +452,115 @@ def doNewOrderFunction(cloudburst, write_set, params, items, all_local, w_tax, d
     return [customer_info, misc, item_data]
 # End doNewOrderDag
 
+#----------------------------------------------------------------------------
+# DoNew Order Transaction
+#----------------------------------------------------------------------------
+
+def getClientByLastName(cloudburst, write_set, customers):
+    customer_ids_first_name = []
+    for customer_id in customers:
+        customer_ids_first_name.append([customer_id, CloudburstReference(customer_id + "C_FIRST", True)])
+
+    return customer_ids_first_name
+
+def getClientByFirstName(cloudburst, write_set, customer_ids_first_name):
+    customers = []
+    customers.append(customer_ids_first_name.pop())
+
+    for cust in customer_ids_first_name:
+        for index in range(len(customers)):
+            if cust[1] < customers[index][1]:
+                customers.insert(index, cust)
+                continue
+
+    assert len(customers) > 0
+
+    namecnt = len(customers)
+    index = int((namecnt - 1) / 2)
+    # Might come float here, check correctness
+    customer_key = customers[index][0]
+    customer = []
+    customer.append(CloudburstReference(customer_key + "C_ID", True))
+    customer.append(CloudburstReference(customer_key + "C_D_ID", True))
+    customer.append(CloudburstReference(customer_key + "C_W_ID", True))
+    customer.append(CloudburstReference(customer_key + "C_FIRST", True))
+    customer.append(CloudburstReference(customer_key + "C_MIDDLE", True))
+    customer.append(CloudburstReference(customer_key + "C_LAST", True))
+    customer.append(CloudburstReference(customer_key + "C_STREET_1", True))
+    customer.append(CloudburstReference(customer_key + "C_STREET_2", True))
+    customer.append(CloudburstReference(customer_key + "C_CITY", True))
+    customer.append(CloudburstReference(customer_key + "C_ZIP", True))
+    customer.append(CloudburstReference(customer_key + "C_PHONE", True))
+    customer.append(CloudburstReference(customer_key + "C_SINCE", True))
+    customer.append(CloudburstReference(customer_key + "C_CREDIT", True))
+    customer.append(CloudburstReference(customer_key + "C_CREDIT_LIM", True))
+    customer.append(CloudburstReference(customer_key + "C_DISCOUNT", True))
+    customer.append(CloudburstReference(customer_key + "C_BALANCE", True))
+    customer.append(CloudburstReference(customer_key + "C_YTD_PAYMENT", True))
+    customer.append(CloudburstReference(customer_key + "C_PAYMENT_CNT", True))
+    customer.append(CloudburstReference(customer_key + "C_DELIVERY_CNT", True))
+    customer.append(CloudburstReference(customer_key + "C_DATA", True))
+
+    return customer
+
+def getLastOrder(cloudburst, write_set, params, client):
+    w_id = params["w_id"]
+    d_id = params["d_id"]
+    c_id = client[0]
+
+    order_search_key = 'ORDERS.INDEXES.ORDERSEARCH.%s.%s.%s' % (w_id, d_id, c_id)
+
+    return client, CloudburstReference(order_search_key, True)
+
+def getOrders(cloudburst, write_set, client, order_search):
+    orders = []
+    for order in order_search:
+        orders.append([order, CloudburstReference(order + 'O_ID', True)])
+
+    return client, orders
+
+def getOrderLinesIndexes(cloudburst, write_set, params, client, orders):
+    w_id = params["w_id"]
+    d_id = params["d_id"]
+    last_order_oid = 0
+    last_order = None
+    for order in orders:
+        if order[1] > last_order_oid:
+            last_order_oid = order[1]
+            last_order = order[0]
+
+    order = []
+    order_line_index = "None"
+    if last_order_oid > 0:
+        order = [CloudburstReference(last_order + 'O_ID', True),
+                 CloudburstReference(last_order + 'O_CARRIER_ID', True),
+                 CloudburstReference(last_order + 'O_ENTRY_D', True)]
+
+        order_line_key = 'ORDER_LINE.INDEXES.SUMOLAMOUNT.%s.%s.%s' % (last_order_oid, d_id, w_id)
+        order_line_index = CloudburstReference(order_line_key, True)
+
+    return client, order, order_line_index
+
+def getOrderLines(cloudburst, write_set, client, order, order_line_index):
+    order_lines = []
+    if order_line_index == "None":
+        return client, [], []
+    else:
+        for order_line in order_line_index:
+            order_lines.append([CloudburstReference(order_line + 'OL_SUPPLY_W_ID', True),
+                                CloudburstReference(order_line + 'OL_I_ID', True),
+                                CloudburstReference(order_line + 'OL_QUANTITY', True),
+                                CloudburstReference(order_line + 'OL_AMOUNT', True),
+                                CloudburstReference(order_line + 'OL_DELIVERY_D', True)])
+
+        return client, order, order_lines
+
+def doOrderStatusFunction(cloudburst, write_set, client, order, order_lines):
+    return [client, order, order_lines]
+
+
+
+
 
 value_output = 1
 real_output_key = 'output_key'
@@ -440,6 +585,15 @@ cloudburst.register(getCustomerID, getCustomerIDName)
 cloudburst.register(getOrderLineSum, getOrderLineSumName)
 cloudburst.register(doDeliveryFunction, doDeliveryFunctionName)
 
+# Register doOrderStatus
+cloudburst.register(getClientByLastName, getClientByLastNameFunctionName)
+cloudburst.register(getClientByFirstName, getClientByFirstNameFunctionName)
+cloudburst.register(getLastOrder, getLastOrderName)
+cloudburst.register(getOrders, getOrdersName)
+cloudburst.register(getOrderLinesIndexes, getOrderLinesIndexesName)
+cloudburst.register(getOrderLines, getOrderLinesName)
+cloudburst.register(doOrderStatusFunction, doOrderStatusFunctionName)
+
 print("Registering dag")
 # Register doNewOrderDag
 success, error = cloudburst.register_dag(doNewOrderDagName, functions, connections)
@@ -448,5 +602,13 @@ print("Registered doNewOrderDag")
 # Register doDeliveryDag
 success, error = cloudburst.register_dag(doDeliveryDagName, doDeliveryFunctions, doDeliveryConnections)
 print("Registered doDeliveryDag")
+
+# Register doOrderStatusClientDag
+success, error = cloudburst.register_dag(doOrderStatusClientDagName, doOrderStatusClientFunctions,
+                                         doOrderStatusClientConnections)
+
+# Register doOrderStatusClientDag
+success, error = cloudburst.register_dag(doOrderStatusClientIndexDagName, doOrderStatusClientIndexFunctions,
+                                         doOrderStatusClientIndexConnections)
 
 print("Registered dags")
