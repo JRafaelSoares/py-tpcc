@@ -117,13 +117,13 @@ class Results:
         for txn in sorted(self.txn_counters.keys()):
             txn_time = self.txn_times[txn]
             txn_cnt = self.txn_counters[txn]
-            rate = u"%.02f txn/s" % ((txn_cnt / duration))
+            rate = u"    %.02f txn/s" % ((txn_cnt / txn_time))
             ret += f % (txn, str(txn_cnt), str(txn_time / txn_cnt * 1000000), rate)
             
             total_time += txn_time
             total_cnt += txn_cnt
         ret += "\n" + ("-"*total_width)
-        total_rate = "%.02f txn/s" % ((total_cnt / duration))
+        total_rate = "     %.02f txn/s" % ((total_cnt / duration))
         ret += f % ("TOTAL", str(total_cnt), str(total_time / total_cnt * 1000000), total_rate)
 
         return (ret.encode('utf-8'))
