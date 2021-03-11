@@ -2,6 +2,7 @@ import datetime
 
 local = True # or False if you are running against a HydroCluster
 elb_address = '127.0.0.1' # or the address of the ELB returned by the
+
 from cloudburst.client.client import CloudburstConnection
 from cloudburst.shared.serializer import Serializer
 from anna.lattices import MultiKeyCausalLattice
@@ -16,6 +17,7 @@ from cloudburst.shared.proto.cloudburst_pb2 import (
     MULTIEXEC # Cloudburst's execution types
 )
 import time
+import uuid
 
 # doNewOrderName
 doNewOrderDagName = 'doNewOrderDag'
@@ -62,6 +64,24 @@ doOrderStatusClientIndexConnections = [(getClientByLastNameFunctionName, getClie
                                        (getLastOrderName, getOrdersName), (getOrdersName, getOrderLinesIndexesName),
                                        (getOrderLinesIndexesName, getOrderLinesName),
                                        (getOrderLinesName, doOrderStatusFunctionName)]
+
+# doPayment
+doPaymentClientDagName = 'doPaymentClientDag'
+doPaymentClientIndexDagName = 'doPaymentClientIndexDag'
+
+getClientByLastNameDoPaymentName = 'getClientByLastNameDoPayment'
+getClientByFirstNameDoPaymentName = 'getClientByFirstNameDoPayment'
+getWarehouseDistrictName = 'getWarehouseDistrict'
+doPaymentFunctionName = 'doPaymentFunction'
+
+doPaymentClientFunctions = [getWarehouseDistrictName, doPaymentFunctionName]
+doPaymentClientConnections = [(getWarehouseDistrictName, doPaymentFunctionName)]
+
+doPaymentClientIndexFunctions = [getClientByLastNameDoPaymentName, getClientByFirstNameDoPaymentName,
+                                 getWarehouseDistrictName, doPaymentFunctionName]
+doPaymentClientIndexConnections = [(getClientByLastNameDoPaymentName, getClientByFirstNameDoPaymentName),
+                                   (getClientByFirstNameDoPaymentName, getWarehouseDistrictName),
+                                   (getWarehouseDistrictName, doPaymentFunctionName)]
 
 # doStockLevel
 doStockLevelDagName = 'doStockLevelDag'
@@ -469,7 +489,7 @@ def doNewOrderFunction(cloudburst, write_set, params, items, all_local, w_tax, d
 # End doNewOrderDag
 
 #----------------------------------------------------------------------------
-# DoNew Order Transaction
+# Do Order Status Transaction
 #----------------------------------------------------------------------------
 
 def getClientByLastName(cloudburst, write_set, customers):
@@ -578,6 +598,143 @@ def doOrderStatusFunction(cloudburst, write_set, client, order, order_lines):
 # doPayment Transaction
 #----------------------------------------------------------------------------
 
+def getClientByLastNameDoPayment(cloudburst, write_set, customers):
+    customer_ids_first_name = []
+    for customer_id in customers:
+        customer_ids_first_name.append([customer_id, CloudburstReference(customer_id + "C_FIRST", True)])
+
+    return customer_ids_first_name
+
+def getClientByFirstNameDoPayment(cloudburst, write_set, customer_ids_first_name):
+    customers = []
+    customers.append(customer_ids_first_name.pop())
+
+    for cust in customer_ids_first_name:
+        for index in range(len(customers)):
+            if cust[1] < customers[index][1]:
+                customers.insert(index, cust)
+                continue
+
+    assert len(customers) > 0
+
+    namecnt = len(customers)
+    index = int((namecnt - 1) / 2)
+    customer_key = customers[index][0]
+    customer = []
+    customer.append(CloudburstReference(customer_key + "C_ID", True))
+    customer.append(CloudburstReference(customer_key + "C_D_ID", True))
+    customer.append(CloudburstReference(customer_key + "C_W_ID", True))
+    customer.append(CloudburstReference(customer_key + "C_FIRST", True))
+    customer.append(CloudburstReference(customer_key + "C_MIDDLE", True))
+    customer.append(CloudburstReference(customer_key + "C_LAST", True))
+    customer.append(CloudburstReference(customer_key + "C_STREET_1", True))
+    customer.append(CloudburstReference(customer_key + "C_STREET_2", True))
+    customer.append(CloudburstReference(customer_key + "C_CITY", True))
+    customer.append(CloudburstReference(customer_key + "C_ZIP", True))
+    customer.append(CloudburstReference(customer_key + "C_PHONE", True))
+    customer.append(CloudburstReference(customer_key + "C_SINCE", True))
+    customer.append(CloudburstReference(customer_key + "C_CREDIT", True))
+    customer.append(CloudburstReference(customer_key + "C_CREDIT_LIM", True))
+    customer.append(CloudburstReference(customer_key + "C_DISCOUNT", True))
+    customer.append(CloudburstReference(customer_key + "C_BALANCE", True))
+    customer.append(CloudburstReference(customer_key + "C_YTD_PAYMENT", True))
+    customer.append(CloudburstReference(customer_key + "C_PAYMENT_CNT", True))
+    customer.append(CloudburstReference(customer_key + "C_DELIVERY_CNT", True))
+    customer.append(CloudburstReference(customer_key + "C_DATA", True))
+
+    return customer
+
+def getWarehouseDistrict(cloudburst, write_set, params, client):
+    w_id = params["w_id"]
+    d_id = params["d_id"]
+
+    warehouse_key = 'WAREHOUSE.%s.' % w_id
+
+    warehouse = [CloudburstReference(warehouse_key + 'W_ID', True),
+                 CloudburstReference(warehouse_key + 'W_NAME', True),
+                 CloudburstReference(warehouse_key + 'W_STREET_1', True),
+                 CloudburstReference(warehouse_key + 'W_STREET_2', True),
+                 CloudburstReference(warehouse_key + 'W_CITY', True),
+                 CloudburstReference(warehouse_key + 'W_STATE', True),
+                 CloudburstReference(warehouse_key + 'W_ZIP', True),
+                 CloudburstReference(warehouse_key + 'W_YTD', True)]
+
+    district_key = 'DISTRICT.%s.%s.' % (w_id, d_id)
+
+    district = [CloudburstReference(district_key + "D_ID", True),
+                CloudburstReference(district_key + "D_W_ID", True),
+                CloudburstReference(district_key + "D_NAME", True),
+                CloudburstReference(district_key + "D_STREET_1", True),
+                CloudburstReference(district_key + "D_STREET_2", True),
+                CloudburstReference(district_key + "D_CITY", True),
+                CloudburstReference(district_key + "D_STATE", True),
+                CloudburstReference(district_key + "D_ZIP", True),
+                CloudburstReference(district_key + "D_TAX", True),
+                CloudburstReference(district_key + "D_YTD", True),
+                CloudburstReference(district_key + "D_NEXT_O_ID", True)]
+
+    return warehouse, district, client
+
+def doPaymentFunction(cloudburst, write_set, params, constant_bad_credit, constant_max_c_data,
+                      warehouse, district, customer):
+    # Initialize transaction properties
+    w_id = params["w_id"]
+    d_id = params["d_id"]
+    h_amount = params["h_amount"]
+    c_w_id = params["c_w_id"]
+    c_d_id = params["c_d_id"]
+    c_id = customer[0]
+    c_last = params["c_last"]
+    h_date = params["h_date"]
+
+    # Values taken from the getClient function and order
+    c_balance = float(customer[15]) - h_amount
+    c_ytd_payment = float(customer[16]) + h_amount
+    c_payment_cnt = float(customer[17]) + 1
+    c_data = customer[19]
+
+    c_credit = customer[12]
+    customer_key = 'CUSTOMER.%s.%s.%s.' % (w_id, d_id, c_id)
+    if c_credit == constant_bad_credit:
+        newData = " ".join(
+            map(
+                str,
+                [c_id, c_d_id, c_w_id, d_id, w_id, h_amount]
+            )
+        )
+
+        c_data = (newData + "|" + c_data)
+        if len(c_data) > constant_max_c_data:
+            c_data = c_data[:constant_max_c_data]
+
+        cloudburst.write(write_set, customer_key + 'C_BALANCE', c_balance)
+        cloudburst.write(write_set, customer_key + 'C_YTD_PAYMENT', c_ytd_payment)
+        cloudburst.write(write_set, customer_key + 'C_PAYMENT_CNT', c_payment_cnt)
+        cloudburst.write(write_set, customer_key + 'C_DATA', c_data)
+
+    else:
+        cloudburst.write(write_set, customer_key + 'C_BALANCE', c_balance)
+        cloudburst.write(write_set, customer_key + 'C_YTD_PAYMENT', c_ytd_payment)
+        cloudburst.write(write_set, customer_key + 'C_PAYMENT_CNT', c_payment_cnt)
+        cloudburst.write(write_set, customer_key + 'C_DATA', '')
+
+    h_data = "%s    %s" % (warehouse[1], district[2])
+
+    history_key = 'HISTORY.%s.' % str(uuid.uuid1())
+
+    cloudburst.write(write_set, history_key + 'H_C_ID', c_id)
+    cloudburst.write(write_set, history_key + 'H_C_D_ID', c_d_id)
+    cloudburst.write(write_set, history_key + 'H_C_W_ID', c_w_id)
+    cloudburst.write(write_set, history_key + 'H_D_ID', d_id)
+    cloudburst.write(write_set, history_key + 'H_W_ID', w_id)
+    cloudburst.write(write_set, history_key + 'H_DATE', h_date)
+    cloudburst.write(write_set, history_key + 'H_AMOUNT', h_amount)
+    cloudburst.write(write_set, history_key + 'H_DATA', h_data)
+
+    return [warehouse, district, customer]
+
+
+
 #----------------------------------------------------------------------------
 # doStockLevel Transaction
 #----------------------------------------------------------------------------
@@ -663,6 +820,12 @@ cloudburst.register(getOrderLinesIndexes, getOrderLinesIndexesName)
 cloudburst.register(getOrderLines, getOrderLinesName)
 cloudburst.register(doOrderStatusFunction, doOrderStatusFunctionName)
 
+# Register doPayment functions
+cloudburst.register(getClientByLastNameDoPayment, getClientByLastNameDoPaymentName)
+cloudburst.register(getClientByFirstNameDoPayment, getClientByFirstNameDoPaymentName)
+cloudburst.register(getWarehouseDistrict, getWarehouseDistrictName)
+cloudburst.register(doPaymentFunction, doPaymentFunctionName)
+
 # Register doStockLevel functions
 cloudburst.register(getOrderID, getOrderIDName)
 cloudburst.register(getStockCount, getStockCountName)
@@ -687,6 +850,13 @@ success, error = cloudburst.register_dag(doOrderStatusClientDagName, doOrderStat
 success, error = cloudburst.register_dag(doOrderStatusClientIndexDagName, doOrderStatusClientIndexFunctions,
                                          doOrderStatusClientIndexConnections)
 print("Registered doOrderStatusDags")
+
+# Register doPayment
+success, error = cloudburst.register_dag(doPaymentClientDagName, doPaymentClientFunctions,
+                                         doPaymentClientConnections)
+
+success, error = cloudburst.register_dag(doPaymentClientIndexDagName, doPaymentClientIndexFunctions,
+                                         doPaymentClientIndexConnections)
 
 # Register doStockLevelDag
 success, error = cloudburst.register_dag(doStockLevelDagName, doStockLevelFunctions,

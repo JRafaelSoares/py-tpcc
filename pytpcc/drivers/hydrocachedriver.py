@@ -1,6 +1,8 @@
 import time
 import logging
 import sys
+import uuid
+
 from drivers.abstractdriver import *
 from cloudburst.client.client import CloudburstConnection
 from cloudburst.shared.serializer import Serializer
@@ -42,6 +44,14 @@ getOrdersName = 'getOrders'
 getOrderLinesIndexesName = 'getOrderLinesIndexes'
 getOrderLinesName = 'getOrderLines'
 doOrderStatusFunctionName = 'doOrderStatusFunction'
+
+# doPayment
+doPaymentClientDagName = 'doPaymentClientDag'
+doPaymentClientIndexDagName = 'doPaymentClientIndexDag'
+getClientByLastNameDoPaymentName = 'getClientByLastNameDoPayment'
+getClientByFirstNameDoPaymentName = 'getClientByFirstNameDoPayment'
+getWarehouseDistrictName = 'getWarehouseDistrict'
+doPaymentFunctionName = 'doPaymentFunction'
 
 # doStockLevel
 doStockLevelDagName = 'doStockLevelDag'
@@ -370,7 +380,68 @@ class HydrocacheDriver(AbstractDriver):
     #	}
     # ------------------------------------------------------------------------
     def doPayment(self, params):
-        return
+        print('TXN DO PAYMENT STARTING --------------')
+        tt = time.time()
+
+        args = []
+
+        # Initialize transactions parameters
+        w_id = params["w_id"]
+        d_id = params["d_id"]
+        c_id = params["c_id"]
+        c_last = params["c_last"]
+
+        doPaymentFunctionArgs = [params, constants.BAD_CREDIT, constants.MAX_C_DATA]
+
+        # We must use two different dags for the case of having a Client ID or not.
+        if c_id != None:
+            # -----------------------------------
+            # Get Customer By Customer ID Query
+            # -----------------------------------
+            customer = []
+            customer_key = 'CUSTOMER.%s.%s.%s.' % (w_id, d_id, c_id)
+            customer.append(CloudburstReference(customer_key + "C_ID", True))
+            customer.append(CloudburstReference(customer_key + "C_D_ID", True))
+            customer.append(CloudburstReference(customer_key + "C_W_ID", True))
+            customer.append(CloudburstReference(customer_key + "C_FIRST", True))
+            customer.append(CloudburstReference(customer_key + "C_MIDDLE", True))
+            customer.append(CloudburstReference(customer_key + "C_LAST", True))
+            customer.append(CloudburstReference(customer_key + "C_STREET_1", True))
+            customer.append(CloudburstReference(customer_key + "C_STREET_2", True))
+            customer.append(CloudburstReference(customer_key + "C_CITY", True))
+            customer.append(CloudburstReference(customer_key + "C_ZIP", True))
+            customer.append(CloudburstReference(customer_key + "C_PHONE", True))
+            customer.append(CloudburstReference(customer_key + "C_SINCE", True))
+            customer.append(CloudburstReference(customer_key + "C_CREDIT", True))
+            customer.append(CloudburstReference(customer_key + "C_CREDIT_LIM", True))
+            customer.append(CloudburstReference(customer_key + "C_DISCOUNT", True))
+            customer.append(CloudburstReference(customer_key + "C_BALANCE", True))
+            customer.append(CloudburstReference(customer_key + "C_YTD_PAYMENT", True))
+            customer.append(CloudburstReference(customer_key + "C_PAYMENT_CNT", True))
+            customer.append(CloudburstReference(customer_key + "C_DELIVERY_CNT", True))
+            customer.append(CloudburstReference(customer_key + "C_DATA", True))
+
+            args.append(params)
+            args.append(customer)
+
+            request = {getWarehouseDistrictName: args, doPaymentFunctionName: doPaymentFunctionArgs}
+            result = self.cloudburst.call_dag(doPaymentClientDagName, request, consistency=MULTI,
+                                              output_key="output_key", direct_response=True)
+
+        else:
+            # ----------------------------------
+            # Get Customers By Last Name Query
+            # ----------------------------------
+            customer_last_name = 'CUSTOMER.INDEXES.NAMESEARCH.%s.%s.%s' % (w_id, d_id, c_last)
+            args.append(CloudburstReference(customer_last_name, True))
+            request = {getClientByLastNameDoPaymentName: args,
+                       getWarehouseDistrictName: [params], doPaymentFunctionName: doPaymentFunctionArgs}
+            result = self.cloudburst.call_dag(doPaymentClientIndexDagName, request, consistency=MULTI,
+                                              output_key="output_key", direct_response=True)
+
+        self.next_scores['HISTORY'] += 1
+        print('TXN DO PAYMENT FINISHED: ' + str(time.time() - tt))
+        return result
     # End doPayment
 
     # ------------------------------------------------------------------------
@@ -546,7 +617,7 @@ class HydrocacheDriver(AbstractDriver):
 
         elif tableName == 'HISTORY':
             for row in tuples:
-                base_key = 'HISTORY.%s.' % self.next_scores['HISTORY']
+                base_key = 'HISTORY.%s.' % str(uuid.uuid1())
                 self.cloudburst.kvs_client.put(base_key + "H_C_ID", self.getKeyLattice(row[0]))
                 self.cloudburst.kvs_client.put(base_key + "H_C_D_ID", self.getKeyLattice(row[1]))
                 self.cloudburst.kvs_client.put(base_key + "H_C_W_ID", self.getKeyLattice(row[2]))
