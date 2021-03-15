@@ -322,29 +322,6 @@ def doDeliveryFunction(cloudburst, write_set, params, dpw, new_order_ids, no_o_i
 
 # ------------------------------------------------------------------------
 # doNewOrder transaction to be registered and executed by cloudburst
-#
-#   Arg_list:
-#       params - Parameters seen on top
-#       ITEMS: - i_ids number of items
-#           ITEM.i_id.I_PRICE
-#           ITEM.i_id.I_NAME
-#           ITEM.i_id.I_DATA
-#       all_local - flag if all items are local
-#       WAREHOUSE.w_id.W_TAX - Tax value of warehouse
-#       DISTRICT.w_id.d_id.D_TAX - Tax value of district
-#       DISTRICT.w_id.d_id.D_NEXT_O_ID - District next ordered ID
-#       CLIENT_INFO:
-#           all information of client
-#       CLIENT.w_id.d_id.c_id.C_DISCOUNT - Client Discount
-#       STOCKS: - List of Stocks
-#           STOCK.i_w_id.i_id.S_QUANTITY
-#           STOCK.i_w_id.i_id.S_YTD
-#           STOCK.i_w_id.i_id.S_ORDER_CNT
-#           STOCK.i_w_id.i_id.S_REMOTE_CNT
-#           STOCK.i_w_id.i_id.S_DATA
-#           STOCK.i_w_id.i_id.S_DIST
-#
-# @return
 # ------------------------------------------------------------------------
 
 def doNewOrderFunction(cloudburst, write_set, params, items, all_local, w_tax, d_tax, d_next_o_id, customer_info,
