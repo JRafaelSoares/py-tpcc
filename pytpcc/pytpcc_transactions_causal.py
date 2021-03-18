@@ -210,6 +210,7 @@ def getOrderLineSum(cloudburst, write_set, dpw, warehouse, no_o_id, order_keys, 
         cursor = d_id - 1
         if no_o_id[cursor] == "None":
             customer_keys.append("None")
+            old_balance_clients.append("None")
         else:
             customer_key = "CUSTOMER.%s.%s.%s." % (warehouse, d_id, orders_client_id[cursor])
             customer_keys.append(customer_key)
@@ -232,7 +233,7 @@ def getOrderLineSum(cloudburst, write_set, dpw, warehouse, no_o_id, order_keys, 
 #   orders_client_id - Client ids of the obtained orders
 #   ol_ids - Order Line Ids
 # ------------------------------------------------------------------------
-def doDeliveryFunction(cloudburst, write_set, params, dpw, new_order_ids, no_o_id, order_keys, ol_ids, sum_order_line,
+def doDeliveryFunction(cloudburst, write_set, params, dpw, no_o_id, order_keys, ol_ids, sum_order_line,
                        ol_counts, customer_keys, old_balance_clients):
     # Initialize input parameters
     w_id = params["w_id"]
@@ -277,10 +278,6 @@ def doDeliveryFunction(cloudburst, write_set, params, dpw, new_order_ids, no_o_i
         cloudburst.write(write_set, new_order_key + "NO_O_ID", "None")
         cloudburst.write(write_set, new_order_key + "NO_D_ID", "None")
         cloudburst.write(write_set, new_order_key + "NO_W_ID", "None")
-
-        # Remove from NEW_ORDER.IDS
-        new_order_ids.remove(new_order_key)
-        cloudburst.write(write_set, 'NEW_ORDER.IDS', new_order_ids)
 
         # Remove new_order index
         new_order_index_key = 'NEW_ORDER.INDEXES.GETNEWORDER.%s.%s' % (w_id, d_id)
@@ -470,28 +467,32 @@ def doNewOrderFunction(cloudburst, write_set, params, items, all_local, w_tax, d
 #----------------------------------------------------------------------------
 
 def getClientByLastName(cloudburst, write_set, customers):
-    customer_ids_first_name = []
+    customer_first_names = []
     for customer_id in customers:
-        customer_ids_first_name.append([customer_id, CloudburstReference(customer_id + "C_FIRST", True)])
+        customer_first_names.append(CloudburstReference(customer_id + "C_FIRST", True))
 
-    return customer_ids_first_name
+    return customers, customer_first_names
 
-def getClientByFirstName(cloudburst, write_set, customer_ids_first_name):
-    customers = []
-    customers.append(customer_ids_first_name.pop())
+def getClientByFirstName(cloudburst, write_set, customer_ids, customer_first_names):
+    customer_ids_order = []
+    customers_names_order = []
 
-    for cust in customer_ids_first_name:
-        for index in range(len(customers)):
-            if cust[1] < customers[index][1]:
-                customers.insert(index, cust)
+    customer_ids_order.append(customer_ids.pop())
+    customers_names_order.append(customer_first_names.pop())
+
+    for count, cust in enumerate(customer_first_names):
+        for index in range(len(customers_names_order)):
+            if cust < customers_names_order[index]:
+                customers_names_order.insert(index, cust)
+                customer_ids_order.insert(index, customer_ids[count])
                 continue
 
-    assert len(customers) > 0
+    assert len(customers_names_order) > 0
 
-    namecnt = len(customers)
+    namecnt = len(customers_names_order)
     index = int((namecnt - 1) / 2)
     # Might come float here, check correctness
-    customer_key = customers[index][0]
+    customer_key = customer_ids_order[index]
     customer = []
     customer.append(CloudburstReference(customer_key + "C_ID", True))
     customer.append(CloudburstReference(customer_key + "C_D_ID", True))
@@ -528,19 +529,20 @@ def getLastOrder(cloudburst, write_set, params, client):
 def getOrders(cloudburst, write_set, client, order_search):
     orders = []
     for order in order_search:
-        orders.append([order, CloudburstReference(order + 'O_ID', True)])
+        orders.append(CloudburstReference(order + 'O_ID', True))
 
-    return client, orders
+    return client, order_search, orders
 
-def getOrderLinesIndexes(cloudburst, write_set, params, client, orders):
+def getOrderLinesIndexes(cloudburst, write_set, params, client, order_search, orders):
     w_id = params["w_id"]
     d_id = params["d_id"]
     last_order_oid = 0
     last_order = None
-    for order in orders:
-        if order[1] > last_order_oid:
-            last_order_oid = order[1]
-            last_order = order[0]
+
+    for index, order in enumerate(orders):
+        if order > last_order_oid:
+            last_order_oid = order
+            last_order = order_search[index]
 
     order = []
     order_line_index = "None"

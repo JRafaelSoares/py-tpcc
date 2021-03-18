@@ -62,7 +62,7 @@ getOrderLinesStockLevelName = 'getOrderLinesStockLevel'
 getStocksName = 'getStocks'
 doStockLevelFunctionName = 'doStockLevelFunction'
 
-class HydrocacheDriver(AbstractDriver):
+class CloudburstDriver(AbstractDriver):
 
     DEFAULT_CONFIG = {
         'func_address' : ("Address of the Cloudburst Interface", "127.0.0.1"),
@@ -83,7 +83,7 @@ class HydrocacheDriver(AbstractDriver):
     # @param string ddl (Data Definintion Language)
     # ------------------------------------------------------------------------
     def __init__(self, ddl):
-        super(HydrocacheDriver,self).__init__("hydrocache",ddl)
+        super(CloudburstDriver,self).__init__("cloudburst",ddl)
         self.cloudburst = None
         self.metadata = {}
         self.t0 = 0
@@ -151,7 +151,7 @@ class HydrocacheDriver(AbstractDriver):
         request = {getNewOrderIndexName: getNewOrderIndexArgs, getNewOrdersName: getNewOrdersArgs,
                    getCustomerIDName: getNewOrderIndexArgs, getOrderLineSumName: getNewOrderIndexArgs,
                    doDeliveryFunctionName: doDeliveryFunctionArgs}
-        result = self.cloudburst.call_dag(doDeliveryDagName, request, consistency=MULTI, output_key="output_key",
+        result = self.cloudburst.call_dag(doDeliveryDagName, request, consistency=NORMAL, output_key="output_key",
                                           direct_response=True)
 
         print('TXN DELIVERY ENDED: ' + str(time.time() - tt))
@@ -279,7 +279,7 @@ class HydrocacheDriver(AbstractDriver):
         args.append(constants.ORIGINAL_STRING)
 
         request = {doNewOrderFunctionName: args}
-        result = self.cloudburst.call_dag(doNewOrderDagName, request, consistency=MULTI, output_key="output_key", direct_response=True)
+        result = self.cloudburst.call_dag(doNewOrderDagName, request, consistency=NORMAL, output_key="output_key", direct_response=True)
 
         logging.info('TXN NEW ORDER FINISHED -----------------')
         logging.info('EXECUTION TIME: %s', time.time() - tt)
@@ -345,7 +345,7 @@ class HydrocacheDriver(AbstractDriver):
             args.append(customer)
 
             request = {getLastOrderName: args, getOrderLinesIndexesName: [params]}
-            result = self.cloudburst.call_dag(doOrderStatusClientDagName, request, consistency=MULTI,
+            result = self.cloudburst.call_dag(doOrderStatusClientDagName, request, consistency=NORMAL,
                                               output_key="output_key", direct_response=True)
 
         else:
@@ -356,7 +356,7 @@ class HydrocacheDriver(AbstractDriver):
             args.append(CloudburstReference(customer_last_name, True))
             request = {getClientByLastNameFunctionName: args,
                        getLastOrderName: [params], getOrderLinesIndexesName: [params]}
-            result = self.cloudburst.call_dag(doOrderStatusClientIndexDagName, request, consistency=MULTI,
+            result = self.cloudburst.call_dag(doOrderStatusClientIndexDagName, request, consistency=NORMAL,
                                               output_key="output_key", direct_response=True)
 
         print('TXN ORDER STATUS FINISHED: ' + str(time.time() - tt))
@@ -424,7 +424,7 @@ class HydrocacheDriver(AbstractDriver):
             args.append(customer)
 
             request = {getWarehouseDistrictName: args, doPaymentFunctionName: doPaymentFunctionArgs}
-            result = self.cloudburst.call_dag(doPaymentClientDagName, request, consistency=MULTI,
+            result = self.cloudburst.call_dag(doPaymentClientDagName, request, consistency=NORMAL,
                                               output_key="output_key", direct_response=True)
 
         else:
@@ -435,10 +435,9 @@ class HydrocacheDriver(AbstractDriver):
             args.append(CloudburstReference(customer_last_name, True))
             request = {getClientByLastNameDoPaymentName: args,
                        getWarehouseDistrictName: [params], doPaymentFunctionName: doPaymentFunctionArgs}
-            result = self.cloudburst.call_dag(doPaymentClientIndexDagName, request, consistency=MULTI,
+            result = self.cloudburst.call_dag(doPaymentClientIndexDagName, request, consistency=NORMAL,
                                               output_key="output_key", direct_response=True)
 
-        self.next_scores['HISTORY'] += 1
         print('TXN DO PAYMENT FINISHED: ' + str(time.time() - tt))
         return result
     # End doPayment
@@ -458,7 +457,7 @@ class HydrocacheDriver(AbstractDriver):
         tt = time.time()
         request = {getOrderIDName: [params], getStockCountName: [params],
                    getStocksName: [params], doStockLevelFunctionName: [params]}
-        result = self.cloudburst.call_dag(doStockLevelDagName, request, consistency=MULTI,
+        result = self.cloudburst.call_dag(doStockLevelDagName, request, consistency=NORMAL,
                                           output_key="output_key", direct_response=True)
         print('TXN STOCK LEVEL FINISHED: ' + str(time.time() - tt))
         return result
@@ -470,7 +469,7 @@ class HydrocacheDriver(AbstractDriver):
     # @param dictionary config (configuration options)
     # ------------------------------------------------------------------------
     def loadConfig(self, config):
-        for key in HydrocacheDriver.DEFAULT_CONFIG.keys():
+        for key in CloudburstDriver.DEFAULT_CONFIG.keys():
             assert key in config, "Missing parameter '%s' in %s configuration" % (key, self.name)
 
         func_address = config['func_address']
@@ -733,6 +732,6 @@ class HydrocacheDriver(AbstractDriver):
     # ------------------------------------------------------------------------
     def getKeyLattice(self, value):
         serializer = Serializer()
-        return serializer.dump_lattice(value, MultiKeyCausalLattice)
+        return serializer.dump_lattice(value)
 
 
