@@ -278,6 +278,9 @@ class HydrocacheDriver(AbstractDriver):
         args.append(constants.NULL_CARRIER_ID)
         args.append(constants.ORIGINAL_STRING)
 
+        # Causality requirements
+        args.append(CloudburstReference('NEW_ORDER.INDEXES.GETNEWORDER.%s.%s' % (w_id, d_id), True))
+
         request = {doNewOrderFunctionName: args}
         result = self.cloudburst.call_dag(doNewOrderDagName, request, consistency=MULTI, output_key="output_key", direct_response=True)
 

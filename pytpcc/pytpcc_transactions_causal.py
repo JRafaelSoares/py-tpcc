@@ -158,6 +158,9 @@ def getNewOrders(cloudburst, write_set, dpw, new_order_indexes):
 def getCustomerID(cloudburst, write_set, dpw, warehouse, no_o_id):
     order_keys = []
     orders_client_id = []
+
+    # Dependency keys
+    order_w_carrier_ids = []
     for d_id in range(1, dpw + 1):
         cursor = d_id - 1
         if no_o_id[cursor] == "None":
@@ -167,8 +170,11 @@ def getCustomerID(cloudburst, write_set, dpw, warehouse, no_o_id):
             client_key = 'ORDER.%s.%s.%s' % (warehouse, d_id, no_o_id[cursor])
             order_keys.append(client_key)
             orders_client_id.append(CloudburstReference(client_key + ".O_C_ID", True))
-    ol_ids = []
 
+            # Required for dependency checks
+            order_w_carrier_ids.append(CloudburstReference(client_key + '.W_CARRIER_ID', True))
+
+    ol_ids = []
     for d_id in range(1, dpw + 1):
         cursor = d_id - 1
         if no_o_id[cursor] == "None":
@@ -177,7 +183,7 @@ def getCustomerID(cloudburst, write_set, dpw, warehouse, no_o_id):
             order_line_key = 'ORDER_LINE.INDEXES.SUMOLAMOUNT.%s.%s.%s' % (no_o_id[cursor], d_id, warehouse)
             ol_ids.append(CloudburstReference(order_line_key, True))
 
-    return no_o_id, order_keys, orders_client_id, ol_ids
+    return no_o_id, order_keys, orders_client_id, ol_ids, order_w_carrier_ids
 
 # ------------------------------------------------------------------------
 # Get Order Line Sum
@@ -191,9 +197,12 @@ def getCustomerID(cloudburst, write_set, dpw, warehouse, no_o_id):
 #   dpw - Districts per warehouse constant
 # ------------------------------------------------------------------------
 
-def getOrderLineSum(cloudburst, write_set, dpw, warehouse, no_o_id, order_keys, orders_client_id, ol_ids):
+def getOrderLineSum(cloudburst, write_set, dpw, warehouse, no_o_id, order_keys, orders_client_id, ol_ids, order_w_carrier_ids):
     sum_order_line = []
     ol_counts = []
+
+    # Dependency keys
+    ol_delivery_d = []
     for d_id in range(1, dpw + 1):
         cursor = d_id - 1
         ol_counts.append(0)
@@ -203,9 +212,14 @@ def getOrderLineSum(cloudburst, write_set, dpw, warehouse, no_o_id, order_keys, 
             for order_key in ol_ids[cursor]:
                 sum_order_line.append(CloudburstReference(order_key + "OL_AMOUNT", True))
                 ol_counts[cursor] += 1
+                ol_delivery_d.append(CloudburstReference(order_key + 'OL_DELIVERY_D', True))
 
     customer_keys = []
     old_balance_clients = []
+    new_orders = []
+    new_orders_index = []
+
+    customer_balance = []
     for d_id in range(1, dpw + 1):
         cursor = d_id - 1
         if no_o_id[cursor] == "None":
@@ -216,7 +230,18 @@ def getOrderLineSum(cloudburst, write_set, dpw, warehouse, no_o_id, order_keys, 
             customer_keys.append(customer_key)
             old_balance_clients.append(CloudburstReference(customer_key + 'C_BALANCE', True))
 
-    return no_o_id, order_keys, ol_ids, sum_order_line, ol_counts, customer_keys, old_balance_clients
+            # Required for Dependency checks
+            new_order_key = 'NEW_ORDER.%s.%s.%s.' % (warehouse, d_id, no_o_id[cursor])
+            new_orders.append(CloudburstReference(new_order_key + "NO_O_ID", True))
+            new_orders.append(CloudburstReference(new_order_key + "NO_D_ID", True))
+            new_orders.append(CloudburstReference(new_order_key + "NO_W_ID", True))
+
+            new_order_index_key = 'NEW_ORDER.INDEXES.GETNEWORDER.%s.%s' % (warehouse, d_id)
+            new_orders_index.append(CloudburstReference(new_order_index_key, True))
+
+            customer_balance.append(CloudburstReference(customer_key + 'C_BALANCE', True))
+    return no_o_id, order_keys, ol_ids, sum_order_line, ol_counts, customer_keys, old_balance_clients, new_orders,\
+           new_orders_index, ol_delivery_d, customer_balance
 
 # ------------------------------------------------------------------------
 # Execute TPC-C Delivery Transaction
@@ -234,7 +259,8 @@ def getOrderLineSum(cloudburst, write_set, dpw, warehouse, no_o_id, order_keys, 
 #   ol_ids - Order Line Ids
 # ------------------------------------------------------------------------
 def doDeliveryFunction(cloudburst, write_set, params, dpw, no_o_id, order_keys, ol_ids, sum_order_line,
-                       ol_counts, customer_keys, old_balance_clients):
+                       ol_counts, customer_keys, old_balance_clients, new_orders, new_order_index, ol_delivery_d,
+                       customer_balance):
     # Initialize input parameters
     w_id = params["w_id"]
     o_carrier_id = params["o_carrier_id"]
@@ -322,7 +348,8 @@ def doDeliveryFunction(cloudburst, write_set, params, dpw, no_o_id, order_keys, 
 # ------------------------------------------------------------------------
 
 def doNewOrderFunction(cloudburst, write_set, params, items, all_local, w_tax, d_tax, d_next_o_id, customer_info,
-                       c_discount, order_search_index, stocks, constant_null_carrier_id, constant_original_string):
+                       c_discount, order_search_index, stocks, constant_null_carrier_id, constant_original_string,
+                       get_new_order_index):
     t0 = time.time()
     w_id = params["w_id"]
     d_id = params["d_id"]
